@@ -85,19 +85,29 @@ function syncQueue(name, keys) {
   return { order: [...seen, ...rest], i: seen.length };
 }
 
-// Identifies the rotation period; a new tab keeps the photo while the slot matches.
-export function slotFor(frequency, now = new Date()) {
-  if (frequency === 'tab') return `tab:${now.getTime()}:${Math.random()}`;
+const HOUR = 3600e3;
+
+// Rotation period saved with the current photo: { slot } id for tab/hour/day,
+// or for 'random' { nextChangeAt }, a timestamp rolled 6-12h ahead.
+export function periodFor(frequency, now = new Date()) {
+  if (frequency === 'random') return { nextChangeAt: now.getTime() + (6 + Math.random() * 6) * HOUR };
+  if (frequency === 'tab') return { slot: `tab:${now.getTime()}:${Math.random()}` };
   const d = new Date(now);
   if (frequency === 'day') d.setHours(d.getHours() - 4); // day rolls over at 4:00
   const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  return frequency === 'day' ? day : `${day} ${d.getHours()}h`;
+  return { slot: frequency === 'day' ? day : `${day} ${d.getHours()}h` };
 }
 
-// Makes a photo the background now and records it in history.
+// True while the current photo is still within its period.
+function inPeriod(current, frequency, now = new Date()) {
+  if (frequency === 'random') return now.getTime() < current.nextChangeAt;
+  return current.slot === periodFor(frequency, now).slot;
+}
+
+// Makes a photo the background now, starts a new period and records it in history.
 export function setCurrent(key, extra = {}) {
   const history = [key, ...state.history.filter((k) => k !== key)].slice(0, 100);
-  return save({ current: { key, slot: slotFor(state.settings.frequency) }, history, ...extra });
+  return save({ current: { key, ...periodFor(state.settings.frequency) }, history, ...extra });
 }
 
 // Advances to the next photo of the active feed (Skip, new period, feed change).
@@ -113,7 +123,7 @@ export function showNext() {
 // Called on new tab: keep the current photo within its period, otherwise advance.
 export function ensureCurrent() {
   const c = state.current;
-  if (c && exists(c.key) && c.slot === slotFor(state.settings.frequency)) return;
+  if (c && exists(c.key) && inPeriod(c, state.settings.frequency)) return;
   return showNext();
 }
 

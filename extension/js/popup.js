@@ -27,7 +27,7 @@ export function renderPopup() {
     <div class="popup-header"><span class="title-icon">${icon('photoInfo')}</span><span class="title">Photo</span></div>
     <div class="popup-body">
       <div class="photo-meta">
-        <div class="photo-meta-title">${esc(photo.location || 'Untitled')}</div>
+        ${photo.location ? `<div class="photo-meta-title">${esc(photo.location)}</div>` : ''}
         ${credit}
       </div>
       <div class="dropdown-divider"></div>

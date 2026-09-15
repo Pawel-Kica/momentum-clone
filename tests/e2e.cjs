@@ -34,14 +34,29 @@ function prepareExtension() {
   return dir;
 }
 
-async function launch(ext) {
+// Fresh temp profile with the extension; `opts` overrides viewport / deviceScaleFactor.
+async function launch(ext, opts = {}) {
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-profile-'));
   return chromium.launchPersistentContext(profile, {
     headless: true, channel: 'chromium', viewport: { width: 1707, height: 890 }, deviceScaleFactor: 1.5,
     // --hide-scrollbars mimics Mac overlay scrollbars so shots compare fairly with Momentum's
     args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`, '--hide-scrollbars'],
+    ...opts,
   });
 }
+
+const HOUR = 3600e3;
+const inWindow = (next, now) => next >= now + 6 * HOUR && next <= now + 12 * HOUR;
+
+// Newest background layer: whether it is in Fit mode and how its photo / blur layers render.
+const bgLayer = (page) => page.evaluate(() => {
+  const layer = [...document.querySelectorAll('.background-item')].pop();
+  const photo = getComputedStyle(layer.querySelector('.background-photo'));
+  const blur = getComputedStyle(layer.querySelector('.background-blur'));
+  const r = layer.querySelector('.background-photo').getBoundingClientRect();
+  return { fit: layer.classList.contains('fit'), size: photo.backgroundSize, blur: blur.display !== 'none' && blur.filter.includes('blur'),
+    fullScreen: r.width === innerWidth && r.height === innerHeight, ratio: Number(layer.dataset.ratio) };
+});
 
 const state = (page) => page.evaluate(() => chrome.storage.local.get(null));
 const text = (page, sel) => page.locator(sel).innerText();
@@ -72,6 +87,9 @@ async function newTab(ctx, time) {
   check('dark loading background', bgColor === 'rgb(33, 33, 33)', bgColor);
   const manifest = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8'));
   check('manifest icons exist', Object.values(manifest.icons).every((f) => fs.existsSync(path.join(ext, f))));
+  const fresh = await page.evaluate(async () => (await import('/js/store.js')).state);
+  check('fresh install: frequency random, fit auto', fresh.settings.frequency === 'random' && fresh.settings.fit === 'auto', JSON.stringify(fresh.settings));
+  check('fresh install: nextChangeAt 6-12h ahead', inWindow(fresh.current.nextChangeAt, new Date('2026-09-15T10:35:00').getTime()), fresh.current.nextChangeAt);
   // Momentum text scaling: 152/54px, then 144/40px under 820px height
   const sizes = () => page.evaluate(() => [
     getComputedStyle(document.querySelector('.clock .time')).fontSize, getComputedStyle(document.querySelector('.greeting-line')).fontSize].join(' '));
@@ -180,17 +198,26 @@ async function newTab(ctx, time) {
   check('blobs downscaled to <=2560 / 480 jpeg', rec.n === 2 && rec.full <= 2560 && rec.thumb <= 480 && rec.type === 'image/jpeg', JSON.stringify(rec));
   check('current tile outlined', (await page.locator('.tile-list-item.active').count()) === 1);
 
+  // Empty location hides the bottom-left text
+  const currentTile = page.locator(`.tile-list-item[data-key="${s.current.key}"]`);
+  await currentTile.hover();
+  await currentTile.locator('[data-act="edit"]').click();
+  await page.fill('.edit-photo [data-field="location"]', '');
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(100);
+  check('empty location hidden', await page.locator('#location').isHidden(), await text(page, '#location'));
+
   // Edit location
-  const first = page.locator('.tile-list-item').first();
-  await first.hover();
-  await first.locator('[data-act="edit"]').click();
+  await currentTile.hover();
+  await currentTile.locator('[data-act="edit"]').click();
   await page.fill('.edit-photo [data-field="location"]', 'Kraków, Poland');
   await page.fill('.edit-photo [data-field="photographer"]', 'Paweł');
   await page.keyboard.press('Enter');
   await page.waitForTimeout(100);
-  const firstKey = await first.getAttribute('data-key');
-  if (firstKey === s.current.key) check('edited location shown bottom-left', (await text(page, '#location')) === 'Kraków, Poland', await text(page, '#location'));
+  check('edited location shown bottom-left', (await text(page, '#location')) === 'Kraków, Poland', await text(page, '#location'));
   await page.locator('.tile-list-item').nth(1).hover();
+  const addRight = await page.locator('.list-add-button').evaluate((el) => el.getBoundingClientRect().right <= el.closest('.content').getBoundingClientRect().right);
+  check('Add Photo fits inside the panel', addRight);
   await page.screenshot({ path: `${SHOTS}/05-my-photos.png` });
 
   // Favorite a custom photo, then delete it: references must go
@@ -220,10 +247,12 @@ async function newTab(ctx, time) {
   check('history newest first', (await page.locator('.tile-list-item').first().getAttribute('data-key')) === s.history[0]);
   await page.screenshot({ path: `${SHOTS}/06-history.png` });
 
-  // Feeds: choose My photos, frequency every tab
-  await page.click('[data-act="feeds"]');
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: `${SHOTS}/07-feeds.png` });
+  // Photos > Settings: choose My photos, frequency every tab
+  await page.click('[data-photos-tab="settings"]');
+  check('settings sub-tab hides Add Photo', (await page.locator('.list-add-button').count()) === 0);
+  const squeezed = await page.locator('.option-description').evaluateAll((els) => els.filter((el) => el.offsetWidth < 200).map((el) => el.textContent));
+  check('settings descriptions not squeezed', squeezed.length === 0, JSON.stringify(squeezed));
+  await page.screenshot({ path: `${SHOTS}/07-photo-settings.png` });
   await page.click('[data-feed="custom"]');
   s = await state(page);
   check('feed custom shows custom photo', s.settings.feed === 'custom' && s.current.key.startsWith('custom:'), s.current.key);
@@ -285,9 +314,91 @@ async function newTab(ctx, time) {
   await page.waitForFunction(() => document.getElementById('location').textContent === 'Dropped Place', null, { timeout: 15000 });
   await page.waitForSelector('#settings.open');
   check('drop adds photo and opens Photos', (await text(page, '.nav .item.active')) === 'Photos');
+  await page.close();
 
+  // Random 6-12h rotation: keep the photo until nextChangeAt, then advance and re-roll
+  const t0 = new Date('2026-09-17T10:00:00').getTime();
+  page = await newTab(ctx, t0);
+  await page.click('#settings-toggle');
+  await page.click('[data-tab="photos"]');
+  await page.click('[data-photos-tab="settings"]');
+  await page.click('[data-feed="stock"]');
+  await page.click('[data-frequency="random"]');
+  let r = (await state(page)).current;
+  check('random: frequency saved, nextChangeAt 6-12h ahead', (await state(page)).settings.frequency === 'random' && inWindow(r.nextChangeAt, t0), JSON.stringify(r));
+  await page.close();
+  page = await newTab(ctx, r.nextChangeAt - 60e3);
+  let r2 = (await state(page)).current;
+  check('random: same photo before nextChangeAt', r2.key === r.key && r2.nextChangeAt === r.nextChangeAt, JSON.stringify(r2));
+  await page.close();
+  const t1 = r.nextChangeAt + 60e3;
+  page = await newTab(ctx, t1);
+  r2 = (await state(page)).current;
+  check('random: new photo after nextChangeAt, re-rolled', r2.key !== r.key && inWindow(r2.nextChangeAt, t1), JSON.stringify(r2));
+  await page.click('#location');
+  await page.click('[data-act="skip"]');
+  await page.waitForTimeout(100);
+  r = (await state(page)).current;
+  check('random: skip re-rolls', r.key !== r2.key && r.nextChangeAt !== r2.nextChangeAt && inWindow(r.nextChangeAt, t1), JSON.stringify(r));
   await page.close();
   await ctx.close();
+
+  // Photo fit, in a DPR 1 profile at 2560x1370 (full screen) and 1280x1370 (half screen)
+  const fctx = await launch(ext, { viewport: { width: 2560, height: 1370 }, deviceScaleFactor: 1 });
+  page = await newTab(fctx);
+  let bg = await bgLayer(page);
+  check('auto: landscape stock fills a landscape screen', !bg.fit && bg.size === 'cover' && bg.ratio > 1.3, JSON.stringify(bg));
+  await page.setViewportSize({ width: 1280, height: 1370 });
+  await page.waitForTimeout(100);
+  bg = await bgLayer(page);
+  check('auto: half screen flips landscape photo to fit', bg.fit && bg.size === 'contain' && bg.blur, JSON.stringify(bg));
+  await page.setViewportSize({ width: 2560, height: 1370 });
+  await page.waitForTimeout(100);
+  check('auto: back to fill on full screen', !(await bgLayer(page)).fit);
+
+  // Portrait phone photo: a centered crop of a stock photo at 1170x2532
+  const portrait = path.join(os.tmpdir(), 'portrait.jpg');
+  execSync(`sips -c 1452 671 "${photoJpgs[0]}" --out "${portrait}" >/dev/null && sips -z 2532 1170 "${portrait}" >/dev/null`);
+  await page.click('#settings-toggle');
+  await page.click('[data-tab="photos"]');
+  await page.setInputFiles('.list-add-button input', portrait);
+  await page.waitForFunction(() => document.getElementById('location').textContent === 'portrait', null, { timeout: 15000 });
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(2300); // 2s fade
+  bg = await bgLayer(page);
+  check('auto: portrait photo fits a landscape screen', bg.fit && bg.size === 'contain' && bg.blur && bg.fullScreen && Math.abs(bg.ratio - 1170 / 2532) < 0.01, JSON.stringify(bg));
+  check('fit: old layers removed after fade', (await page.locator('.background-item').count()) === 1);
+  await page.screenshot({ path: `${SHOTS}/09-fit-portrait-2560.png` });
+  await page.setViewportSize({ width: 1280, height: 1370 });
+  await page.waitForTimeout(200);
+  check('auto: portrait still fits at half screen', (await bgLayer(page)).fit);
+  await page.screenshot({ path: `${SHOTS}/10-fit-portrait-1280.png` });
+
+  // Fit setting: Fill screen crops the portrait, persists across tabs; Fit to screen forces fit
+  await page.click('#settings-toggle');
+  await page.click('[data-photos-tab="settings"]');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/11-photo-settings-1280.png` });
+  await page.click('[data-fit="fill"]');
+  check('fill screen: cover, no blur', (await state(page)).settings.fit === 'fill' && (await bgLayer(page)).size === 'cover' && !(await bgLayer(page)).blur);
+  await page.setViewportSize({ width: 2560, height: 1370 });
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: `${SHOTS}/12-photo-settings-2560.png` });
+  await page.close();
+  page = await newTab(fctx);
+  check('fit setting persists in a new tab', !(await bgLayer(page)).fit && (await page.evaluate(async () => (await import('/js/store.js')).state.settings.fit)) === 'fill');
+  await page.evaluate(async () => (await import('/js/store.js')).setSetting('fit', 'fit'));
+  await page.evaluate(async () => (await import('/js/photos.js')).showNext());
+  await page.waitForTimeout(2300);
+  bg = await bgLayer(page);
+  check('fit to screen: landscape stock fits too', bg.fit && bg.ratio > 1.3 && bg.size === 'contain', JSON.stringify(bg));
+  await page.hover('#location');
+  await page.evaluate(() => document.body.classList.add('dragging'));
+  await page.waitForTimeout(400);
+  const scale = await page.evaluate(() => getComputedStyle(document.getElementById('backgrounds')).scale);
+  check('drag-over scale still applies', scale === '1.1', scale);
+  await page.close();
+  await fctx.close();
   console.log(failures ? `\n${failures} failure(s)` : '\nall passed');
   process.exit(failures ? 1 : 0);
 })();

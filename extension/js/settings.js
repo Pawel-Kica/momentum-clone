@@ -1,20 +1,21 @@
-// Settings panel: General (widget toggles) and Photos (feeds, My Photos / Nature / Favorites / History grids).
+// Settings panel: General (widget toggles) and Photos (My Photos / Nature / Favorites / History grids, Settings sub-tab).
 
 import { state, setSetting, save } from './store.js';
 import { icon } from './icons.js';
 import { esc, toggle, dismissOnOutside } from './dom.js';
-import { getPhoto, exists, customKeys, stockKeys, addFiles, setCurrent, showNext, updateCustom, deleteCustom, toggleFavorite, slotFor } from './photos.js';
+import { getPhoto, exists, customKeys, stockKeys, addFiles, setCurrent, showNext, updateCustom, deleteCustom, toggleFavorite, periodFor } from './photos.js';
 
 const panel = document.getElementById('settings');
 const toggleBtn = document.getElementById('settings-toggle');
-const ui = { open: false, tab: 'general', photosTab: 'custom', feedsOpen: false, editingId: null };
+const ui = { open: false, tab: 'general', photosTab: 'custom', editingId: null };
 
 const FEEDS = [
   ['stock', 'Nature photos', 'See a new photo from the curated nature feed'],
   ['custom', 'My photos', 'Add your own photos and change the photo anytime'],
   ['favorites', 'Favorites', 'Rotate through the photos you marked with a heart'],
 ];
-const FREQUENCIES = [['tab', 'Every new tab'], ['hour', 'Every hour'], ['day', 'Every day']];
+const FREQUENCIES = [['tab', 'Every new tab'], ['hour', 'Every hour'], ['random', 'Every 6-12 hours'], ['day', 'Every day']];
+const FITS = [['auto', 'Auto'], ['fill', 'Fill screen'], ['fit', 'Fit to screen']];
 
 // Opens the panel on a tab ("general" | "photos"), optionally on a photos sub-tab.
 export function openSettings(tab, photosTab) {
@@ -31,6 +32,10 @@ export function closeSettings() {
 // One settings row with label, description and a right-side control.
 const option = (act, label, desc, control, extra = '') =>
   `<div class="option" ${act}><div><div class="option-label">${label}</div><div class="option-description">${desc}</div></div>${control}</div>${extra}`;
+
+// "A | B | C" choice list; each button carries data-<name>="value".
+const optionsList = (name, choices, active) => `<div class="options-list-row">${choices.map(([v, label], i) =>
+  `${i ? '<span class="options-list-divider"></span>' : ''}<button class="options-list-option${active === v ? ' active' : ''}" data-${name}="${v}">${label}</button>`).join('')}</div>`;
 
 function generalPanel() {
   const s = state.settings;
@@ -51,7 +56,7 @@ function generalPanel() {
 function tile(key, actions = '') {
   const p = getPhoto(key);
   const active = state.current?.key === key ? ' active' : '';
-  return `<div class="tile-list-item${active}" data-key="${esc(key)}" title="${esc(p.location || 'Untitled')}">
+  return `<div class="tile-list-item${active}" data-key="${esc(key)}" title="${esc(p.location)}">
     <div class="tile-list-image" style="background-image:url('${esc(p.thumb)}')"></div>
     ${actions && `<div class="tile-list-actions">${actions}</div>`}
   </div>`;
@@ -79,8 +84,24 @@ function editForm() {
     </div>`;
 }
 
+// Photos > Settings sub-tab: feed source, rotation frequency and photo fit.
+function photoSettings() {
+  const { feed, frequency, fit } = state.settings;
+  return `
+    <div class="section">
+      <div class="section-header">Feeds</div>
+      ${FEEDS.map(([v, label, desc]) => option(`data-feed="${v}"`, label, desc, toggle(feed === v))).join('')}
+    </div>
+    <div class="section">
+      <div class="section-header">Display</div>
+      ${option('', 'Change photo', 'How often a new photo appears', optionsList('frequency', FREQUENCIES, frequency))}
+      ${option('', 'Photo fit', 'Auto shows the whole photo if filling crops too much', optionsList('fit', FITS, fit))}
+    </div>`;
+}
+
 function photoGrid() {
   const t = ui.photosTab;
+  if (t === 'settings') return photoSettings();
   const empty = (title, desc) =>
     `<div class="settings-empty"><p class="settings-empty-title">${title}</p><p class="settings-empty-description">${desc}</p></div>`;
   let keys;
@@ -106,29 +127,18 @@ function photoGrid() {
 }
 
 function photosPanel() {
-  const { feed, frequency } = state.settings;
-  const tabs = [['custom', 'My Photos'], ['stock', 'Nature'], ['favorites', 'Favorites'], ['history', 'History']];
-  const choices = FREQUENCIES.map(([v, label], i) =>
-    `${i ? '<span class="options-list-divider"></span>' : ''}<button class="options-list-option${frequency === v ? ' active' : ''}" data-frequency="${v}">${label}</button>`).join('');
+  const tabs = [['custom', 'My Photos'], ['stock', 'Nature'], ['favorites', 'Favorites'], ['history', 'History'], ['settings', 'Settings']];
   return `
     <div class="setting-panel">
       <div class="panel-header-row">
         <div>
           <div class="setting-panel-title">Photos</div>
-          <div class="setting-panel-description">See a new inspiring photo each day</div>
+          <div class="setting-panel-description">See a new inspiring photo every few hours</div>
         </div>
-        <button class="button button-neutral feeds-button${ui.feedsOpen ? ' open' : ''}" data-act="feeds">${icon('sliders')}<span>Feeds</span>${icon('chevron')}</button>
+        ${ui.photosTab === 'settings' ? '' : '<label class="button button-primary list-add-button">+ Add Photo<input type="file" accept="image/*" multiple></label>'}
       </div>
-      <div class="collapsible${ui.feedsOpen ? ' open' : ''}"><div>
-        <div class="section">
-          <div class="section-header">Feeds</div>
-          ${FEEDS.map(([v, label, desc]) => option(`data-feed="${v}"`, label, desc, toggle(feed === v))).join('')}
-          ${option('', 'Change photo', 'How often a new photo appears', `<div class="options-list-row">${choices}</div>`)}
-        </div>
-      </div></div>
       <div class="settings-subnav">
         <div class="subnav-tabs">${tabs.map(([v, label]) => `<h4 class="${ui.photosTab === v ? 'active' : ''}" data-photos-tab="${v}">${label}</h4>`).join('')}</div>
-        <label class="button button-primary list-add-button">+ Add Photo<input type="file" accept="image/*" multiple></label>
       </div>
       ${photoGrid()}
     </div>`;
@@ -174,18 +184,13 @@ async function onClick(e) {
     return showNext();
   }
   if (d('[data-frequency]')) {
-    // Keep today's photo; the new frequency applies from the next period.
+    // Keep the current photo; its period restarts under the new frequency.
     const { frequency } = d('[data-frequency]').dataset;
-    return save({ settings: { ...state.settings, frequency }, current: state.current && { ...state.current, slot: slotFor(frequency) } });
+    return save({ settings: { ...state.settings, frequency }, current: state.current && { key: state.current.key, ...periodFor(frequency) } });
   }
+  if (d('[data-fit]')) return setSetting('fit', d('[data-fit]').dataset.fit);
   const act = d('[data-act]')?.dataset.act;
   const key = d('[data-key]')?.dataset.key;
-  if (act === 'feeds') {
-    ui.feedsOpen = !ui.feedsOpen;
-    d('[data-act]').classList.toggle('open', ui.feedsOpen);
-    panel.querySelector('.collapsible').classList.toggle('open', ui.feedsOpen);
-    return;
-  }
   if (act === 'delete') return deleteCustom(key.slice(7));
   if (act === 'unfavorite') return toggleFavorite(key);
   if (act === 'edit') {

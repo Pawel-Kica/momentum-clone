@@ -42,7 +42,12 @@ svg { display: block; flex-shrink: 0; }
 /* Background */
 .backgrounds { position: fixed; inset: 0; z-index: -1; transition: scale 0.3s ease; }
 body.dragging .backgrounds { scale: 1.1; }
-.background-item { position: absolute; inset: 0; background: center / cover no-repeat; opacity: 0; }
+.background-item { position: absolute; inset: 0; overflow: hidden; opacity: 0; }
+.background-item > div { position: absolute; inset: 0; background: center / cover no-repeat; }
+/* Fit: whole photo on top of a blurred, darkened copy; negative inset hides the blur's soft edges */
+.background-blur { display: none; }
+.fit .background-blur { display: block; inset: -120px; filter: blur(40px) brightness(0.8) saturate(1.2); }
+.fit .background-photo { background-size: contain; }
 .fade { animation: fadein 0.3s ease-out forwards; }
 .fade-slow { animation: fadein 2s ease-out forwards; }
 @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
@@ -217,7 +222,9 @@ a.source-text:hover { color: #fff; }
 .option-label { font: 500 1rem var(--font-family); }
 .option:has(.toggle-switch:not(.on)) .option-label { color: var(--color-stop-5); }
 .option-description { margin-top: 0.125rem; color: var(--color-stop-4); font: 400 0.875rem var(--font-family); text-wrap: balance; }
-.options-list-row { display: flex; align-items: center; }
+/* Rows with a choice list put the choices on their own line, so long lists never squeeze the label */
+.option:has(.options-list-row) { flex-direction: column; align-items: flex-start; gap: 0.5625rem; cursor: default; }
+.options-list-row { display: flex; align-items: center; margin-left: -0.375rem; }
 .options-list-option { font-size: 0.75rem; font-weight: 700; padding: 0.25rem 0.375rem; opacity: 0.5; white-space: nowrap; }
 .options-list-option:hover { opacity: 0.7; }
 .options-list-option.active { opacity: 1; }
@@ -235,15 +242,8 @@ a.source-text:hover { color: #fff; }
 .button-primary:hover { background: hsl(226 42% 36%); }
 .button input[type="file"] { position: absolute; inset: 0; opacity: 0; z-index: 2; cursor: pointer; font-size: 0; }
 
-.panel-header-row { display: flex; align-items: flex-start; justify-content: space-between; }
-.feeds-button svg { width: 16px; height: 16px; }
-.feeds-button svg:first-child { width: 14px; height: 14px; }
-.feeds-button svg:last-child { transition: rotate 0.3s ease; }
-.feeds-button.open svg:last-child { rotate: 180deg; }
-.collapsible { display: grid; grid-template-rows: 0fr; opacity: 0; transition: grid-template-rows 0.3s ease, opacity 0.3s ease; }
-.collapsible.open { grid-template-rows: 1fr; opacity: 1; }
-.collapsible > div { overflow: hidden; min-height: 0; }
 
+.panel-header-row { display: flex; align-items: flex-start; justify-content: space-between; }
 .settings-subnav { margin-top: 1.5rem; padding-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
 .subnav-tabs { display: flex; }
 .settings-subnav h4 { padding: 12px 0; font-size: 0.8125rem; font-weight: 600; text-transform: uppercase; white-space: nowrap; cursor: pointer; opacity: 0.6; }

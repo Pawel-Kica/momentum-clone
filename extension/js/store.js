@@ -9,9 +9,10 @@ export const DEFAULTS = {
     includeName: true,
     name: '',
     feed: 'stock', // stock | custom | favorites
-    frequency: 'day', // tab | hour | day
+    frequency: 'random', // tab | hour | random (every 6-12h) | day
+    fit: 'auto', // auto | fill | fit
   },
-  current: null, // { key, slot }
+  current: null, // { key, slot } or { key, nextChangeAt } for 'random'
   favorites: [], // keys, newest first
   history: [], // keys, newest first, max 100
   queues: {}, // feed name -> { order: [keys], i }

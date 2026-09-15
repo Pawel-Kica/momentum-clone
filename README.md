@@ -1,19 +1,46 @@
 # Momentum Lite
 
-New tab with Momentum's clock, greeting and background photo, plus free custom photos. Fully offline.
+A free Chrome new tab that looks like Momentum: big clock, "Good morning, Paweł.", and a beautiful photo. Use your own photos (Momentum charges for that) or 100 built-in nature photos. Works offline, no account.
+
+![New tab](docs/screenshots/1-new-tab.jpg)
 
 ## Install
 
-1. Open `chrome://extensions`, turn on Developer mode.
-2. Load unpacked, pick the `extension/` folder.
-3. Open a new tab. After code changes, hit reload on the extension card.
+1. Download this repo (Code > Download ZIP) and unzip it.
+2. In Chrome, go to `chrome://extensions`.
+3. Turn on **Developer mode** (top right).
+4. Click **Load unpacked** and pick the `extension` folder.
+5. Open a new tab. Done.
 
-## Photos
+Have the real Momentum? Turn it off, only one extension can own the new tab.
 
-- Settings (bottom-left sliders icon) > Photos > Feeds picks the source: Nature photos (bundled, `extension/photos/stock.json`), My photos, or Favorites. Empty feeds fall back to Nature photos.
-- Change photo: every new tab, every hour or every day (rolls over at 4:00). Each feed is walked in a saved shuffled order with no repeats until it runs out.
-- Add your own with + Add Photo or by dropping images anywhere on the page. They are downscaled to 2560px and kept in IndexedDB, so they survive restarts but live only in this Chrome profile. Hover a tile to edit its location and credit, or delete it.
-- Settings, favorites, history and rotation state are in `chrome.storage.local`. Open new tabs stay in sync over a BroadcastChannel.
+Text looks small? Press Cmd + = on the new tab. Chrome remembers the zoom.
+
+## How to use
+
+Click the sliders icon in the bottom-left corner.
+
+**General:** show or hide the clock and greeting, 24-hour clock. Hover the greeting and click "..." to edit your name.
+
+![General settings](docs/screenshots/2-general.png)
+
+**Photos > My Photos:** click + Add Photo or drop images anywhere on the page. Hover a photo to edit its location or delete it.
+
+![My photos](docs/screenshots/3-my-photos.png)
+
+**Photos > Settings:** pick where photos come from, how often they change, and how they fit the screen.
+
+![Photo settings](docs/screenshots/4-photo-settings.png)
+
+Click the location text at the bottom left to favorite the photo or skip to the next one.
+
+## Details
+
+- Feeds: Nature photos, My photos or Favorites. An empty feed falls back to Nature photos.
+- Change photo: every new tab, every hour, every 6-12 hours (default, random) or every day (at 4:00). No repeats until the feed runs out.
+- Photo fit: Fill screen crops the photo, Fit to screen shows all of it over a blurred copy. Auto (default) fits when filling would crop more than 35%.
+- Your photos are shrunk to 2560px and saved in this Chrome profile (IndexedDB). Removing the extension deletes them.
+- Nature photos are from Wikimedia Commons, credits in `extension/photos/stock.json`.
 
 ## Tests
 
