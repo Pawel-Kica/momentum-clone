@@ -1,20 +1,20 @@
-# Momentum Lite
+# Momentum Clone
 
-A free Chrome new tab that looks like Momentum: big clock, "Good morning, Paweł.", and a beautiful photo. Use your own photos (Momentum charges for that) or 100 built-in nature photos. Works offline, no account.
+A free Chrome new tab that looks just like Momentum: a big clock, "Good morning, Paweł." and a beautiful photo behind it. You can use your own photos, which Momentum only allows on Plus for $4.99 a month, or pick from 100 nature photos that come with it. It works offline and needs no account.
 
 ![New tab](docs/screenshots/1-new-tab.jpg)
 
 ## Install
 
-1. Download this repo (Code > Download ZIP) and unzip it.
-2. In Chrome, go to `chrome://extensions`.
-3. Turn on **Developer mode** (top right).
-4. Click **Load unpacked** and pick the `extension` folder.
-5. Open a new tab. Done.
+1. Clone the repo:
+   ```
+   git clone git@github.com:Pawel-Kica/momentum-clone.git
+   ```
+2. In Chrome, go to `chrome://extensions` and turn on **Developer mode** (top right).
+3. Click **Load unpacked** and pick the `extension` folder.
+4. Open a new tab and you're done!
 
-Have the real Momentum? Turn it off, only one extension can own the new tab.
-
-Text looks small? Press Cmd + = on the new tab. Chrome remembers the zoom.
+If you have the real Momentum installed, turn it off, because only one extension can take over the new tab.
 
 ## How to use
 
