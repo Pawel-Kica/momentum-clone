@@ -22,15 +22,15 @@ Click the sliders icon in the bottom-left corner.
 
 **General:** show or hide the clock and greeting, 24-hour clock. Hover the greeting and click "..." to edit your name.
 
-![General settings](docs/screenshots/2-general.png)
+<img src="docs/screenshots/2-general.png" alt="General settings" width="380">
 
 **Photos > My Photos:** click + Add Photo or drop images anywhere on the page. Hover a photo to edit its location or delete it.
 
-![My photos](docs/screenshots/3-my-photos.png)
+<img src="docs/screenshots/3-my-photos.png" alt="My photos" width="380">
 
 **Photos > Settings:** pick where photos come from, how often they change, and how they fit the screen.
 
-![Photo settings](docs/screenshots/4-photo-settings.png)
+<img src="docs/screenshots/4-photo-settings.png" alt="Photo settings" width="380">
 
 Click the location text at the bottom left to favorite the photo or skip to the next one.
 
